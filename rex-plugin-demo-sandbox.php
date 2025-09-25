@@ -11,25 +11,27 @@ if (!defined('ABSPATH')) exit;
 class Rex_Multisite_Demo {
 
     private $base_sites = [
-            'wpvr' => 1,     // Template site ID (clean WordPress install)
-            'pfm' => 1,      // Same template for all plugins
-            'plugin3' => 1,
+            'wpvr' => 1,
+            'pfm' => 2,
+            'cart-lift' => 3,
     ];
 
     // Define plugin packages for each demo type
     private $plugin_packages = [
             'wpvr' => [
-                    'wpvr/wpvr.php',           // Main WPVR plugin
-                    'wpvr-pro/wpvr-pro.php'    // WPVR Pro addon
+                    'wpvr/wpvr.php',
+                    'wpvr-pro/wpvr-pro.php'
             ],
             'pfm' => [
-                    'pfm/pfm.php',             // Main PFM plugin
-                    'pfm-pro/pfm-pro.php'      // PFM Pro addon
+                    'best-woocommerce-feed/best-woocommerce-feeds.php',
+                    'best-woocommerce-feed-pro/best-woocommerce-feed-pro.php',
+                    'woocommerce/woocommerce.php'
             ],
-            'plugin3' => [
-                    'plugin3/plugin3.php',
-                    'plugin3-pro/plugin3-pro.php'
-            ]
+            'cart-lift' => [
+                'cart-lift/cart-lift.php',
+                'cart-lift-pro/cart-lift-pro.php',
+                'woocommerce/woocommerce.php'
+            ],
     ];
 
     public function __construct() {
@@ -889,20 +891,19 @@ class Rex_Multisite_Demo {
                 'wpvr_is_premium',
             ],
             'pfm' => [
-                'pfm_version',
-                'pfm_installed_time',
-                'pfm_license_key',
-                'pfm_license_status',
-                'pfm_license_data',
-                'pfm_is_premium',
+                'wpfm_version',
+                'wpfm_installed_time',
+                'wpfm_pro_license_key',
+                'wpfm_pro_license_status',
+                'wpfm_pro_license_data',
+                'wpfm_is_premium',
             ],
-            'plugin3' => [
-                'plugin3_version',
-                'plugin3_installed_time',
-                'plugin3_license_key',
-                'plugin3_license_status',
-                'plugin3_license_data',
-                'plugin3_is_premium',
+            'cart-lift' => [
+                'rex_cart_lift_version',
+                'rex_cart_lift_installed_time',
+                'cart_lift_license_status',
+                'cart_lift_license_key',
+                'cart_lift_is_premium',
             ],
         ];
         if (isset($plugin_options[$plugin])) {
