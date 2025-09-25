@@ -197,6 +197,9 @@ class Rex_Multisite_Demo {
             // Initialize the site properly
             $this->initialize_demo_site($blog_id, $plugin, $user_key, $domain);
 
+            // Clone plugin options for all supported plugins
+            $this->clone_all_plugin_options($plugin, $base_id, $blog_id);
+
             // Copy content from the base site
             $this->copy_site_content($base_id, $blog_id, $plugin, $user_key, $domain);
 
@@ -978,6 +981,54 @@ class Rex_Multisite_Demo {
         add_filter('option_recently_activated', function($value) {
             return is_array($value) ? $value : [];
         }, 999);
+    }
+
+    /** Generic option cloning for any plugin or option set */
+    public function clone_options($option_names, $source_blog_id, $target_blog_id) {
+        switch_to_blog($source_blog_id);
+        $options = [];
+        foreach ($option_names as $name) {
+            $options[$name] = get_option($name);
+        }
+        restore_current_blog();
+        switch_to_blog($target_blog_id);
+        foreach ($options as $name => $value) {
+            update_option($name, $value);
+        }
+        restore_current_blog();
+    }
+
+    /** Clone plugin options for all supported plugins */
+    public function clone_all_plugin_options($plugin, $source_blog_id, $target_blog_id) {
+        $plugin_options = [
+            'wpvr' => [
+                'wpvr_version',
+                'wpvr_installed_time',
+                'wpvr_edd_license_key',
+                'wpvr_edd_license_status',
+                'wpvr_edd_license_data',
+                'wpvr_is_premium',
+            ],
+            'pfm' => [
+                'pfm_version',
+                'pfm_installed_time',
+                'pfm_license_key',
+                'pfm_license_status',
+                'pfm_license_data',
+                'pfm_is_premium',
+            ],
+            'plugin3' => [
+                'plugin3_version',
+                'plugin3_installed_time',
+                'plugin3_license_key',
+                'plugin3_license_status',
+                'plugin3_license_data',
+                'plugin3_is_premium',
+            ],
+        ];
+        if (isset($plugin_options[$plugin])) {
+            $this->clone_options($plugin_options[$plugin], $source_blog_id, $target_blog_id);
+        }
     }
 }
 
