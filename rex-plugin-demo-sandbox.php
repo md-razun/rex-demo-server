@@ -11,9 +11,25 @@ if (!defined('ABSPATH')) exit;
 class Rex_Multisite_Demo {
 
     private $base_sites = [
-            'wpvr' => 1,     // Site ID of wpvr-base
-            'plugin2' => 3,
-            'plugin3' => 4,
+            'wpvr' => 1,     // Template site ID (clean WordPress install)
+            'pfm' => 1,      // Same template for all plugins
+            'plugin3' => 1,
+    ];
+
+    // Define plugin packages for each demo type
+    private $plugin_packages = [
+            'wpvr' => [
+                    'wpvr/wpvr.php',           // Main WPVR plugin
+                    'wpvr-pro/wpvr-pro.php'    // WPVR Pro addon
+            ],
+            'pfm' => [
+                    'pfm/pfm.php',             // Main PFM plugin
+                    'pfm-pro/pfm-pro.php'      // PFM Pro addon
+            ],
+            'plugin3' => [
+                    'plugin3/plugin3.php',
+                    'plugin3-pro/plugin3-pro.php'
+            ]
     ];
 
     public function __construct() {
@@ -234,238 +250,303 @@ class Rex_Multisite_Demo {
         error_log("Demo site initialization completed: $blog_id");
     }
 
-    /** Copy content from base site to new demo site - PLUGIN-SPECIFIC VERSION */
+    /** Copy content from template site and activate selected plugins */
     private function copy_site_content($base_id, $new_site_id, $plugin, $user_key, $subdomain) {
-        error_log("Copying $plugin-specific content from base site $base_id to new site $new_site_id");
+        error_log("Setting up demo site for $plugin from template site $base_id");
 
-        switch_to_blog($base_id);
+        // Copy basic template content (clean WordPress install)
+        $this->copy_template_content($base_id, $new_site_id);
 
-        // Get plugin-specific options based on the plugin name
-        $plugin_options = $this->get_plugin_specific_options($plugin);
-
-        // Copy theme-related options if needed
-        $theme_options = [
-                'template' => get_option('template'),
-                'stylesheet' => get_option('stylesheet'),
-                'theme_mods_' . get_stylesheet() => get_option('theme_mods_' . get_stylesheet(), [])
-        ];
-
-        restore_current_blog();
-
-        // Switch to new site and apply plugin-specific options
+        // Switch to new site to activate plugins and configure
         switch_to_blog($new_site_id);
 
-        // Copy plugin-specific options
-        foreach ($plugin_options as $option_name => $option_value) {
-            if ($option_value !== false) {
-                update_option($option_name, $option_value);
-                error_log("Copied plugin option: $option_name");
-            }
-        }
+        // Activate plugin package for the selected demo
+        $this->activate_plugin_package($plugin);
 
-        // Copy theme options
-        foreach ($theme_options as $option_name => $option_value) {
-            if ($option_value !== false && !empty($option_value)) {
-                update_option($option_name, $option_value);
-            }
-        }
+        // Apply plugin-specific configurations
+        $this->apply_plugin_configurations($plugin);
 
-        // Copy plugin-specific posts and pages
-        $this->copy_plugin_posts($base_id, $new_site_id, $plugin);
-
-        // Activate the specific plugin
-        $this->activate_plugin($plugin);
+        // Create sample content for the plugin
+        $this->create_plugin_demo_content($plugin);
 
         restore_current_blog();
 
-        error_log("Plugin-specific content copying completed for $plugin");
+        error_log("Demo site setup completed for $plugin");
     }
 
-    /** Get plugin-specific options */
-    private function get_plugin_specific_options($plugin) {
-        $plugin_options = [];
-
-        switch ($plugin) {
-            case 'wpvr':
-                // WPVR-specific option patterns
-                $wpvr_option_patterns = [
-                        'wpvr_%',           // All WPVR options
-                        'rex_wpvr_%',       // Rex WPVR options
-                        'wpvr_license_%',   // License options
-                        'wpvr_settings',    // Main settings
-                        'wpvr_tours',       // Tour data
-                        'wpvr_scenes'       // Scene data
-                ];
-
-                global $wpdb;
-                $table_name = $wpdb->options;
-
-                foreach ($wpvr_option_patterns as $pattern) {
-                    $options = $wpdb->get_results($wpdb->prepare(
-                            "SELECT option_name, option_value FROM $table_name WHERE option_name LIKE %s",
-                            $pattern
-                    ));
-
-                    foreach ($options as $option) {
-                        $value = maybe_unserialize($option->option_value);
-                        $plugin_options[$option->option_name] = $value;
-                    }
-                }
-                break;
-
-            case 'plugin2':
-                // Add plugin2-specific options here
-                break;
-
-            case 'plugin3':
-                // Add plugin3-specific options here
-                break;
-        }
-
-        return $plugin_options;
-    }
-
-    /** Copy only posts related to the specific plugin */
-    private function copy_plugin_posts($base_id, $new_site_id, $plugin) {
+    /** Copy basic template content (minimal WordPress setup) */
+    private function copy_template_content($base_id, $new_site_id) {
         switch_to_blog($base_id);
 
-        $post_types_to_copy = [];
-        $meta_keys_to_filter = [];
+        // Only copy essential template content
+        $essential_options = [
+                'template', 'stylesheet',  // Theme
+                'blogdescription', 'start_of_week', 'use_balanceTags',
+                'use_smilies', 'require_name_email', 'comments_notify',
+                'posts_per_rss', 'rss_use_excerpt', 'mailserver_url',
+                'mailserver_login', 'mailserver_pass', 'mailserver_port',
+                'default_category', 'default_comment_status', 'default_ping_status',
+                'default_pingback_flag', 'posts_per_page', 'date_format',
+                'time_format', 'links_updated_date_format', 'comment_order',
+                'comments_per_page', 'default_comments_page', 'comment_registration',
+                'close_comments_for_old_posts', 'close_comments_days_old',
+                'thread_comments', 'thread_comments_depth', 'page_comments',
+                'comment_moderation', 'moderation_notify', 'permalink_structure',
+                'rewrite_rules', 'hack_file', 'upload_url_path', 'thumbnail_size_w',
+                'thumbnail_size_h', 'thumbnail_crop', 'medium_size_w', 'medium_size_h',
+                'avatar_default', 'avatar_rating', 'uploads_use_yearmonth_folders',
+                'embed_autourls', 'embed_size_w', 'embed_size_h',
+                'timezone_string', 'show_avatars'
+        ];
 
-        switch ($plugin) {
-            case 'wpvr':
-                // WPVR uses custom post types and specific meta keys
-                $post_types_to_copy = ['wpvr_item', 'wpvr_scene', 'page', 'post'];
-                $meta_keys_to_filter = ['wpvr_%', 'rex_wpvr_%', '_wpvr_%'];
-                break;
-
-            case 'plugin2':
-                // Define post types for plugin2
-                break;
+        $options_to_copy = [];
+        foreach ($essential_options as $option_name) {
+            $value = get_option($option_name);
+            if ($value !== false) {
+                $options_to_copy[$option_name] = $value;
+            }
         }
 
-        if (empty($post_types_to_copy)) {
-            restore_current_blog();
+        // Copy theme customizations if any
+        $theme_mods = get_option('theme_mods_' . get_stylesheet(), []);
+        if (!empty($theme_mods)) {
+            $options_to_copy['theme_mods_' . get_stylesheet()] = $theme_mods;
+        }
+
+        // Get template pages (like Privacy Policy, Sample Page)
+        $template_pages = get_posts([
+                'post_type' => 'page',
+                'post_status' => 'any',
+                'numberposts' => -1
+        ]);
+
+        restore_current_blog();
+
+        // Apply to new site
+        switch_to_blog($new_site_id);
+
+        // Copy essential options
+        foreach ($options_to_copy as $option_name => $option_value) {
+            update_option($option_name, $option_value);
+        }
+
+        // Copy template pages
+        foreach ($template_pages as $page) {
+            $new_page_data = [
+                    'post_title' => $page->post_title,
+                    'post_content' => $page->post_content,
+                    'post_status' => $page->post_status,
+                    'post_type' => 'page',
+                    'post_name' => $page->post_name,
+                    'menu_order' => $page->menu_order
+            ];
+
+            $new_page_id = wp_insert_post($new_page_data);
+
+            // Copy essential page meta
+            if ($new_page_id) {
+                $meta_to_copy = ['_wp_page_template'];
+                foreach ($meta_to_copy as $meta_key) {
+                    $meta_value = get_post_meta($page->ID, $meta_key, true);
+                    if ($meta_value) {
+                        update_post_meta($new_page_id, $meta_key, $meta_value);
+                    }
+                }
+            }
+        }
+
+        restore_current_blog();
+    }
+
+    /** Activate specific plugin package for the demo */
+    private function activate_plugin_package($plugin) {
+        if (!isset($this->plugin_packages[$plugin])) {
+            error_log("No plugin package defined for: $plugin");
             return;
         }
 
-        // Get posts of specific types or posts with plugin-specific meta
-        $posts = get_posts([
-                'numberposts' => -1,
-                'post_type' => $post_types_to_copy,
-                'post_status' => ['publish', 'draft', 'private'],
-                'suppress_filters' => true
-        ]);
+        $plugins_to_activate = $this->plugin_packages[$plugin];
+        // Always include rex-plugin-demo-sandbox
+        $plugins_to_activate[] = 'rex-plugin-demo-sandbox/rex-plugin-demo-sandbox.php';
+        $active_plugins = get_option('active_plugins', []);
+        $activation_successful = [];
 
-        // Also get posts that have plugin-specific meta
-        if (!empty($meta_keys_to_filter)) {
-            global $wpdb;
-            foreach ($meta_keys_to_filter as $meta_pattern) {
-                $meta_posts = $wpdb->get_results($wpdb->prepare(
-                        "SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE meta_key LIKE %s",
-                        $meta_pattern
-                ));
-
-                foreach ($meta_posts as $meta_post) {
-                    $post = get_post($meta_post->post_id);
-                    if ($post && !in_array($post, $posts, true)) {
-                        $posts[] = $post;
-                    }
-                }
-            }
-        }
-
-        $post_data = [];
-        foreach ($posts as $post) {
-            // Get all post meta
-            $all_meta = get_post_meta($post->ID);
-            $filtered_meta = [];
-
-            // Filter meta to only include plugin-specific keys
-            foreach ($all_meta as $meta_key => $meta_values) {
-                $should_include = false;
-
-                foreach ($meta_keys_to_filter as $pattern) {
-                    if (fnmatch($pattern, $meta_key)) {
-                        $should_include = true;
-                        break;
-                    }
-                }
-
-                // Always include essential WordPress meta
-                $essential_meta = ['_edit_lock', '_edit_last', '_wp_page_template'];
-                if (in_array($meta_key, $essential_meta)) {
-                    $should_include = true;
-                }
-
-                if ($should_include) {
-                    $filtered_meta[$meta_key] = $meta_values;
-                }
-            }
-
-            $post_data[] = [
-                    'post_title' => $post->post_title,
-                    'post_content' => $post->post_content,
-                    'post_excerpt' => $post->post_excerpt,
-                    'post_status' => $post->post_status,
-                    'post_type' => $post->post_type,
-                    'post_date' => $post->post_date,
-                    'post_date_gmt' => $post->post_date_gmt,
-                    'post_modified' => $post->post_modified,
-                    'post_modified_gmt' => $post->post_modified_gmt,
-                    'menu_order' => $post->menu_order,
-                    'post_name' => $post->post_name,
-                    'meta' => $filtered_meta
-            ];
-        }
-
-        restore_current_blog();
-
-        // Insert posts into new site
-        switch_to_blog($new_site_id);
-
-        foreach ($post_data as $post_info) {
-            $meta = $post_info['meta'];
-            unset($post_info['meta']);
-
-            $new_post_id = wp_insert_post($post_info);
-
-            if ($new_post_id && !is_wp_error($new_post_id)) {
-                // Copy filtered post meta
-                foreach ($meta as $key => $values) {
-                    foreach ($values as $value) {
-                        add_post_meta($new_post_id, $key, maybe_unserialize($value));
-                    }
-                }
-            }
-        }
-
-        restore_current_blog();
-    }
-
-    /** Activate specific plugin on the demo site */
-    private function activate_plugin($plugin) {
-        $plugin_files = [
-                'wpvr' => 'wpvr/wpvr.php', // Adjust path as needed
-                'plugin2' => 'plugin2/plugin2.php',
-                'plugin3' => 'plugin3/plugin3.php'
-        ];
-
-        if (isset($plugin_files[$plugin])) {
-            $plugin_file = $plugin_files[$plugin];
-
+        foreach ($plugins_to_activate as $plugin_file) {
             // Check if plugin file exists
             if (file_exists(WP_PLUGIN_DIR . '/' . $plugin_file)) {
-                $active_plugins = get_option('active_plugins', []);
-
                 if (!in_array($plugin_file, $active_plugins)) {
                     $active_plugins[] = $plugin_file;
-                    update_option('active_plugins', $active_plugins);
-                    error_log("Activated plugin: $plugin_file");
+                    $activation_successful[] = $plugin_file;
+                    error_log("Added to activation queue: $plugin_file");
+                } else {
+                    error_log("Already active: $plugin_file");
                 }
             } else {
                 error_log("Plugin file not found: $plugin_file");
             }
+        }
+
+        // Update active plugins option
+        update_option('active_plugins', array_unique($active_plugins));
+
+        // Trigger plugin activation hooks
+        foreach ($activation_successful as $plugin_file) {
+            do_action('activate_' . $plugin_file);
+        }
+
+        error_log("Activated plugins for $plugin: " . implode(', ', $activation_successful));
+    }
+
+    /** Apply plugin-specific configurations */
+    private function apply_plugin_configurations($plugin) {
+        switch ($plugin) {
+            case 'wpvr':
+                // Set WPVR-specific options
+                update_option('wpvr_settings', [
+                        'license_key' => 'demo_license',
+                        'enable_tour_preview' => true,
+                        'default_scene_type' => '360'
+                ]);
+
+                // Create WPVR-specific pages
+                $this->create_wpvr_demo_pages();
+                break;
+
+            case 'pfm':
+                // Set PFM-specific options
+                update_option('pfm_settings', [
+                        'license_key' => 'demo_license',
+                        'enable_frontend_manager' => true,
+                        'default_post_status' => 'publish'
+                ]);
+
+                // Create PFM demo content
+                $this->create_pfm_demo_pages();
+                break;
+
+            case 'plugin3':
+                // Configure plugin3
+                break;
+        }
+    }
+
+    /** Create plugin-specific demo content */
+    private function create_plugin_demo_content($plugin) {
+        switch ($plugin) {
+            case 'wpvr':
+                $this->create_wpvr_sample_tours();
+                break;
+            case 'pfm':
+                $this->create_pfm_sample_posts();
+                break;
+        }
+    }
+
+    /** Create WPVR demo pages */
+    private function create_wpvr_demo_pages() {
+        $demo_pages = [
+                [
+                        'title' => 'WPVR Tour Gallery',
+                        'content' => '[wpvr_gallery]',
+                        'template' => 'page-wpvr-gallery.php'
+                ],
+                [
+                        'title' => 'Sample VR Tour',
+                        'content' => 'Welcome to our VR experience! This page demonstrates WPVR functionality.',
+                        'template' => 'page-wpvr-tour.php'
+                ]
+        ];
+
+        foreach ($demo_pages as $page_data) {
+            $page_id = wp_insert_post([
+                    'post_title' => $page_data['title'],
+                    'post_content' => $page_data['content'],
+                    'post_status' => 'publish',
+                    'post_type' => 'page',
+                    'post_name' => sanitize_title($page_data['title'])
+            ]);
+
+            if ($page_id && isset($page_data['template'])) {
+                update_post_meta($page_id, '_wp_page_template', $page_data['template']);
+            }
+        }
+    }
+
+    /** Create sample WPVR tours */
+    private function create_wpvr_sample_tours() {
+        // Create sample VR tour post
+        $tour_id = wp_insert_post([
+                'post_title' => 'Demo Virtual Tour',
+                'post_content' => 'This is a sample virtual reality tour to demonstrate WPVR capabilities.',
+                'post_status' => 'publish',
+                'post_type' => 'wpvr_item', // WPVR custom post type
+                'meta_input' => [
+                        'wpvr_tour_type' => '360',
+                        'wpvr_preview_img' => 'demo-preview.jpg',
+                        'wpvr_scene_data' => json_encode([
+                                'scenes' => [
+                                        [
+                                                'id' => 'scene1',
+                                                'title' => 'Demo Scene',
+                                                'image' => 'demo-360.jpg'
+                                        ]
+                                ]
+                        ])
+                ]
+        ]);
+
+        error_log("Created sample WPVR tour with ID: $tour_id");
+    }
+
+    /** Create PFM demo pages */
+    private function create_pfm_demo_pages() {
+        $demo_pages = [
+                [
+                        'title' => 'Frontend Post Manager',
+                        'content' => '[pfm_post_form]',
+                        'slug' => 'frontend-manager'
+                ],
+                [
+                        'title' => 'User Dashboard',
+                        'content' => '[pfm_user_dashboard]',
+                        'slug' => 'user-dashboard'
+                ]
+        ];
+
+        foreach ($demo_pages as $page_data) {
+            wp_insert_post([
+                    'post_title' => $page_data['title'],
+                    'post_content' => $page_data['content'],
+                    'post_status' => 'publish',
+                    'post_type' => 'page',
+                    'post_name' => $page_data['slug']
+            ]);
+        }
+    }
+
+    /** Create sample PFM posts */
+    private function create_pfm_sample_posts() {
+        $sample_posts = [
+                [
+                        'title' => 'Sample Frontend Post',
+                        'content' => 'This post was created using the Post Frontend Manager plugin.',
+                        'author' => get_current_user_id()
+                ],
+                [
+                        'title' => 'Another Demo Post',
+                        'content' => 'This demonstrates the frontend post creation capabilities.',
+                        'author' => get_current_user_id()
+                ]
+        ];
+
+        foreach ($sample_posts as $post_data) {
+            wp_insert_post([
+                    'post_title' => $post_data['title'],
+                    'post_content' => $post_data['content'],
+                    'post_status' => 'publish',
+                    'post_author' => $post_data['author'],
+                    'post_type' => 'post'
+            ]);
         }
     }
 
@@ -514,16 +595,20 @@ class Rex_Multisite_Demo {
         $guest_username = 'demo_admin_' . $user_key;
         $guest_email = $guest_username . '@demo.local';
         $guest_password = wp_generate_password(12, true);
-        $expiry = time() + 1800;
+        $expiry = time() + 1800; // 30 minutes
+
+        error_log("Creating demo user: $guest_username for site $new_site_id");
 
         $user_id = wp_create_user($guest_username, $guest_password, $guest_email);
 
         if (!is_wp_error($user_id)) {
+            error_log("Demo user created successfully with ID: $user_id");
+
             $user = new WP_User($user_id);
             $user->set_role('administrator');
             update_user_meta($user_id, '_demo_expiry', $expiry);
 
-            // Ensure user is added to this site
+            // Ensure user is added to this site with admin role
             add_user_to_blog($new_site_id, $user_id, 'administrator');
 
             // Generate secure token for auto-login
@@ -536,14 +621,21 @@ class Rex_Multisite_Demo {
             ];
 
             $token = base64_encode(json_encode($token_data));
+            $token_key = 'demo_token_' . md5($token);
 
-            // Store token temporarily (5 minutes to use)
-            set_transient('demo_token_' . md5($token), $token_data, 300);
+            // Store token temporarily (full session duration)
+            set_transient($token_key, $token_data, 1800);
 
+            error_log("Created token: $token_key");
+            error_log("Token expires at: " . date('Y-m-d H:i:s', $token_data['expiry']));
+
+            // Create the demo URL with token
             $demo_url = 'http://' . $subdomain . '/wp-admin/?demo_login=' . urlencode($token);
+            error_log("Demo URL created: $demo_url");
+
         } else {
             error_log('Demo user creation failed: ' . $user_id->get_error_message());
-            $demo_url = 'http://' . $subdomain;
+            $demo_url = 'http://' . $subdomain . '/wp-admin/';
         }
 
         restore_current_blog();
@@ -557,60 +649,59 @@ class Rex_Multisite_Demo {
         $token = sanitize_text_field($_GET['demo_login']);
 
         try {
+            error_log("Processing demo token: " . substr($token, 0, 20) . "...");
+
             $token_data = json_decode(base64_decode($token), true);
 
             if (!$token_data || !isset($token_data['user_id']) || !isset($token_data['site_id'])) {
+                error_log("Invalid token data structure");
+                wp_die('Invalid demo token structure.');
                 return;
             }
 
-            // Check if token exists and is valid
+            error_log("Token data: user_id={$token_data['user_id']}, site_id={$token_data['site_id']}");
+
+            // Check expiry and hash directly if transient is missing
             $stored_data = get_transient('demo_token_' . md5($token));
-            if (!$stored_data || $stored_data['expiry'] < time()) {
+            $now = time();
+            $is_expired = ($token_data['expiry'] < $now);
+            $is_hash_valid = (isset($token_data['hash']) && $token_data['hash'] === wp_hash($token_data['user_id'] . $token_data['site_id'] . $token_data['expiry']));
+
+            if (($stored_data && $stored_data['expiry'] < $now) || $is_expired) {
+                error_log("Token expired or not found in transients");
                 wp_die('Demo session has expired or is invalid.');
                 return;
             }
-
-            // Verify token hash
-            if (!isset($token_data['hash']) || $token_data['hash'] !== wp_hash($token_data['user_id'] . $token_data['site_id'] . $token_data['expiry'])) {
-                wp_die('Invalid demo token.');
+            if (!$is_hash_valid) {
+                error_log("Token hash verification failed");
+                wp_die('Invalid demo token hash.');
                 return;
             }
 
             $user_id = (int)$token_data['user_id'];
             $site_id = (int)$token_data['site_id'];
 
-            // Verify we're on the correct site
-            if (get_current_blog_id() !== $site_id) {
-                wp_die('Invalid demo site access.');
-                return;
+            // Switch to correct site if multisite
+            if (is_multisite() && get_current_blog_id() !== $site_id) {
+                switch_to_blog($site_id);
             }
 
-            $user = get_user_by('id', $user_id);
-            if (!$user) {
-                wp_die('Demo user not found.');
-                return;
-            }
-
-            // Check if user belongs to this site
-            if (!is_user_member_of_blog($user_id, $site_id)) {
-                add_user_to_blog($site_id, $user_id, 'administrator');
-            }
-
-            // Auto-login the user
+            // Log in the user
             wp_set_current_user($user_id);
             wp_set_auth_cookie($user_id, true);
-            do_action('wp_login', $user->user_login, $user);
+            do_action('wp_login', get_userdata($user_id)->user_login, get_userdata($user_id));
 
-            // Delete the token after use
-            delete_transient('demo_token_' . md5($token));
-
-            // Redirect to admin dashboard
-            wp_redirect(admin_url());
+            // Redirect to dashboard/admin
+            $redirect_url = admin_url();
+            if (isset($_GET['redirect_to'])) {
+                $redirect_url = esc_url_raw($_GET['redirect_to']);
+            }
+            wp_redirect($redirect_url);
             exit;
 
         } catch (Exception $e) {
             error_log('Demo token error: ' . $e->getMessage());
-            wp_die('Invalid demo token.');
+            wp_die('Invalid demo token: ' . $e->getMessage());
         }
     }
 
@@ -891,3 +982,4 @@ class Rex_Multisite_Demo {
 }
 
 new Rex_Multisite_Demo();
+
