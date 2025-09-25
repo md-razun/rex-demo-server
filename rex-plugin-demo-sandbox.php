@@ -12,8 +12,8 @@ class Rex_Multisite_Demo {
 
     private $base_sites = [
             'wpvr' => 1,
-            'pfm' => 2,
-            'cart-lift' => 3,
+            'pfm' => 1,
+            'cart-lift' => 1,
     ];
 
     // Define plugin packages for each demo type
@@ -198,10 +198,10 @@ class Rex_Multisite_Demo {
             // Initialize the site properly
             $this->initialize_demo_site($blog_id, $plugin, $user_key, $domain);
 
-            // Clone plugin options for all supported plugins
-            $this->clone_all_plugin_options($plugin, $base_id, $blog_id);
+            // Clone only the selected plugin's options
+            $this->clone_selected_plugin_options($plugin, $base_id, $blog_id);
 
-            // Copy content from the base site
+            // Copy content from the base site and activate only the selected plugin
             $this->copy_site_content($base_id, $blog_id, $plugin, $user_key, $domain);
 
             // Create demo user with admin privileges
@@ -367,36 +367,79 @@ class Rex_Multisite_Demo {
             return;
         }
 
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/misc.php';
+        require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+        require_once ABSPATH . 'wp-admin/includes/class-plugin-upgrader.php';
+
         $plugins_to_activate = $this->plugin_packages[$plugin];
         // Always include rex-plugin-demo-sandbox
         $plugins_to_activate[] = 'rex-plugin-demo-sandbox/rex-plugin-demo-sandbox.php';
+        $plugins_to_activate = array_unique($plugins_to_activate);
         $active_plugins = get_option('active_plugins', []);
+        error_log('Active plugins before activation: ' . implode(', ', $active_plugins));
         $activation_successful = [];
+        $deactivation_successful = [];
+        $uninstall_successful = [];
+        $uninstall_failed = [];
 
+        // Deactivate and uninstall any plugins not in the list
+        foreach ($active_plugins as $plugin_file) {
+            if (!in_array($plugin_file, $plugins_to_activate)) {
+                deactivate_plugins($plugin_file, true, false);
+                $deactivation_successful[] = $plugin_file;
+                // Try to uninstall and delete plugin files
+                if (is_plugin_active($plugin_file)) {
+                    deactivate_plugins($plugin_file, true, false);
+                }
+                $plugin_dir = WP_PLUGIN_DIR . '/' . dirname($plugin_file);
+                if (is_dir($plugin_dir)) {
+                    global $wp_filesystem;
+                    if (empty($wp_filesystem)) {
+                        require_once ABSPATH . '/wp-admin/includes/file.php';
+                        WP_Filesystem();
+                    }
+                    if ($wp_filesystem->delete($plugin_dir, true, 'd')) {
+                        $uninstall_successful[] = $plugin_file;
+                        error_log("Uninstalled and deleted: $plugin_file");
+                    } else {
+                        $uninstall_failed[] = $plugin_file;
+                        error_log("Failed to delete plugin files: $plugin_file");
+                    }
+                } else {
+                    $uninstall_failed[] = $plugin_file;
+                    error_log("Plugin directory not found for uninstall: $plugin_file");
+                }
+            }
+        }
+        // Remove deactivated/uninstalled plugins from active_plugins array
+        $active_plugins = array_values(array_diff($active_plugins, $deactivation_successful, $uninstall_successful));
+
+        // Activate only the required plugins that exist locally
         foreach ($plugins_to_activate as $plugin_file) {
-            // Check if plugin file exists
-            if (file_exists(WP_PLUGIN_DIR . '/' . $plugin_file)) {
+            $plugin_path = WP_PLUGIN_DIR . '/' . $plugin_file;
+            if (file_exists($plugin_path)) {
                 if (!in_array($plugin_file, $active_plugins)) {
+                    activate_plugin($plugin_file);
                     $active_plugins[] = $plugin_file;
                     $activation_successful[] = $plugin_file;
-                    error_log("Added to activation queue: $plugin_file");
+                    error_log("Activated: $plugin_file");
                 } else {
                     error_log("Already active: $plugin_file");
                 }
             } else {
-                error_log("Plugin file not found: $plugin_file");
+                error_log("Plugin file not found locally: $plugin_file");
             }
         }
 
         // Update active plugins option
         update_option('active_plugins', array_unique($active_plugins));
 
-        // Trigger plugin activation hooks
-        foreach ($activation_successful as $plugin_file) {
-            do_action('activate_' . $plugin_file);
-        }
-
         error_log("Activated plugins for $plugin: " . implode(', ', $activation_successful));
+        error_log("Uninstalled plugins: " . implode(', ', $uninstall_successful));
+        error_log("Failed uninstalls: " . implode(', ', $uninstall_failed));
+        error_log("Deactivated plugins: " . implode(', ', $deactivation_successful));
     }
 
     /**
@@ -879,8 +922,8 @@ class Rex_Multisite_Demo {
         restore_current_blog();
     }
 
-    /** Clone plugin options for all supported plugins */
-    public function clone_all_plugin_options($plugin, $source_blog_id, $target_blog_id) {
+    /** Clone only the selected plugin's options for the demo site */
+    public function clone_selected_plugin_options($plugin, $source_blog_id, $target_blog_id) {
         $plugin_options = [
             'wpvr' => [
                 'wpvr_version',
