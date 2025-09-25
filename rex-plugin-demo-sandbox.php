@@ -594,7 +594,7 @@ class Rex_Multisite_Demo {
             position: fixed;
             bottom: 10px;
             right: 10px;
-            background: linear-gradient(90deg, #ff9800 0%, #ff5722 100%);
+            background: linear-gradient(90deg, #0031ff 0%, #ff5722 100%);
             color: #fff;
             padding: 16px 24px;
             border-radius: 8px;
