@@ -57,7 +57,6 @@ class Rex_Multisite_Demo {
         add_action('wp_footer', [$this, 'demo_countdown_script'], 1);
         // Also add countdown timer to admin footer for admin pages
         add_action('admin_footer', [$this, 'demo_countdown_script'], 1);
-        add_action('admin_print_footer_scripts', [$this, 'demo_countdown_script'], 1);
 
         // Hook early to check for demo user and ensure timer will be displayed
         add_action('init', [$this, 'check_demo_user'], 5);
@@ -576,22 +575,59 @@ class Rex_Multisite_Demo {
 
     /** Countdown timer */
     public function demo_countdown_script() {
+        static $timer_rendered = false;
+        if ($timer_rendered) return;
+        $timer_rendered = true;
         if (!is_user_logged_in()) return;
-
         $user_id = get_current_user_id();
         $expiry = get_user_meta($user_id, '_demo_expiry', true);
-
         if (!$expiry) return;
-
         $remaining = $expiry - time();
         if ($remaining <= 0) {
-            // Log out expired user
             wp_logout();
             wp_redirect(network_home_url());
             exit;
         }
         ?>
-        <div id="rex-demo-timer" style="position:fixed;bottom:10px;right:10px;background:#222;color:#fff;padding:10px;border-radius:5px;z-index:9999;font-family:sans-serif;font-size:14px;">
+        <style>
+        #rex-demo-timer {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: linear-gradient(90deg, #ff9800 0%, #ff5722 100%);
+            color: #fff;
+            padding: 16px 24px;
+            border-radius: 8px;
+            z-index: 9999;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 22px;
+            font-weight: bold;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            border: 2px solid #fff3e0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: rex-timer-pop 0.5s;
+        }
+        #rex-demo-countdown {
+            font-size: 28px;
+            font-weight: bold;
+            color: #fffde7;
+            animation: rex-timer-pulse 1s infinite;
+            letter-spacing: 2px;
+        }
+        @keyframes rex-timer-pulse {
+            0% { color: #fffde7; text-shadow: 0 0 8px #fffde7; }
+            50% { color: #ffe082; text-shadow: 0 0 16px #ff9800; }
+            100% { color: #fffde7; text-shadow: 0 0 8px #fffde7; }
+        }
+        @keyframes rex-timer-pop {
+            0% { transform: scale(0.8); }
+            100% { transform: scale(1); }
+        }
+        </style>
+        <div id="rex-demo-timer">
+            <span style="font-size:30px;">⏰</span>
             Demo Access: <span id="rex-demo-countdown"></span>
         </div>
         <script>
@@ -600,7 +636,7 @@ class Rex_Multisite_Demo {
                 var min = Math.floor(remaining / 60);
                 var sec = remaining % 60;
                 if (sec < 10) sec = '0' + sec;
-                document.getElementById('rex-demo-countdown').innerText = min + 'm ' + sec + 's';
+                document.getElementById('rex-demo-countdown').innerText = min + 'm ' + sec;
                 remaining--;
                 if(remaining < 0) {
                     alert('Demo session expired. You will be redirected to the main site.');
