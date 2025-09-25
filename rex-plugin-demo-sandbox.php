@@ -234,56 +234,239 @@ class Rex_Multisite_Demo {
         error_log("Demo site initialization completed: $blog_id");
     }
 
-    /** Copy content from base site to new demo site - FIXED VERSION */
+    /** Copy content from base site to new demo site - PLUGIN-SPECIFIC VERSION */
     private function copy_site_content($base_id, $new_site_id, $plugin, $user_key, $subdomain) {
-        error_log("Copying content from base site $base_id to new site $new_site_id");
+        error_log("Copying $plugin-specific content from base site $base_id to new site $new_site_id");
 
-        // Copy options from base site
         switch_to_blog($base_id);
-        $options = wp_load_alloptions();
 
-        // Filter out options that shouldn't be copied
-        $skip_options = [
-                'siteurl', 'home', 'blogname', 'admin_email',
-                'users_can_register', 'default_role', '_demo_expiry',
-                'upload_path', 'upload_url_path',
-                'recently_activated', 'active_plugins', 'deactivated_plugins',
-                'wp_user_roles', 'sidebars_widgets'
+        // Get plugin-specific options based on the plugin name
+        $plugin_options = $this->get_plugin_specific_options($plugin);
+
+        // Copy theme-related options if needed
+        $theme_options = [
+                'template' => get_option('template'),
+                'stylesheet' => get_option('stylesheet'),
+                'theme_mods_' . get_stylesheet() => get_option('theme_mods_' . get_stylesheet(), [])
         ];
 
-        foreach ($skip_options as $skip) {
-            unset($options[$skip]);
-        }
         restore_current_blog();
 
-        // Switch to new site and set options
+        // Switch to new site and apply plugin-specific options
         switch_to_blog($new_site_id);
 
-        // Copy filtered options with proper handling
-        foreach ($options as $option_name => $option_value) {
-            if (!in_array($option_name, $skip_options)) {
-                // Properly handle serialized data
-                if (is_string($option_value) && $this->is_serialized($option_value)) {
-                    $unserialized = @unserialize($option_value);
-                    if ($unserialized !== false) {
-                        update_option($option_name, $unserialized);
-                    } else {
-                        // Skip corrupted serialized data
-                        error_log("Skipping corrupted serialized option: $option_name");
-                        continue;
+        // Copy plugin-specific options
+        foreach ($plugin_options as $option_name => $option_value) {
+            if ($option_value !== false) {
+                update_option($option_name, $option_value);
+                error_log("Copied plugin option: $option_name");
+            }
+        }
+
+        // Copy theme options
+        foreach ($theme_options as $option_name => $option_value) {
+            if ($option_value !== false && !empty($option_value)) {
+                update_option($option_name, $option_value);
+            }
+        }
+
+        // Copy plugin-specific posts and pages
+        $this->copy_plugin_posts($base_id, $new_site_id, $plugin);
+
+        // Activate the specific plugin
+        $this->activate_plugin($plugin);
+
+        restore_current_blog();
+
+        error_log("Plugin-specific content copying completed for $plugin");
+    }
+
+    /** Get plugin-specific options */
+    private function get_plugin_specific_options($plugin) {
+        $plugin_options = [];
+
+        switch ($plugin) {
+            case 'wpvr':
+                // WPVR-specific option patterns
+                $wpvr_option_patterns = [
+                        'wpvr_%',           // All WPVR options
+                        'rex_wpvr_%',       // Rex WPVR options
+                        'wpvr_license_%',   // License options
+                        'wpvr_settings',    // Main settings
+                        'wpvr_tours',       // Tour data
+                        'wpvr_scenes'       // Scene data
+                ];
+
+                global $wpdb;
+                $table_name = $wpdb->options;
+
+                foreach ($wpvr_option_patterns as $pattern) {
+                    $options = $wpdb->get_results($wpdb->prepare(
+                            "SELECT option_name, option_value FROM $table_name WHERE option_name LIKE %s",
+                            $pattern
+                    ));
+
+                    foreach ($options as $option) {
+                        $value = maybe_unserialize($option->option_value);
+                        $plugin_options[$option->option_name] = $value;
                     }
-                } else {
-                    update_option($option_name, $option_value);
+                }
+                break;
+
+            case 'plugin2':
+                // Add plugin2-specific options here
+                break;
+
+            case 'plugin3':
+                // Add plugin3-specific options here
+                break;
+        }
+
+        return $plugin_options;
+    }
+
+    /** Copy only posts related to the specific plugin */
+    private function copy_plugin_posts($base_id, $new_site_id, $plugin) {
+        switch_to_blog($base_id);
+
+        $post_types_to_copy = [];
+        $meta_keys_to_filter = [];
+
+        switch ($plugin) {
+            case 'wpvr':
+                // WPVR uses custom post types and specific meta keys
+                $post_types_to_copy = ['wpvr_item', 'wpvr_scene', 'page', 'post'];
+                $meta_keys_to_filter = ['wpvr_%', 'rex_wpvr_%', '_wpvr_%'];
+                break;
+
+            case 'plugin2':
+                // Define post types for plugin2
+                break;
+        }
+
+        if (empty($post_types_to_copy)) {
+            restore_current_blog();
+            return;
+        }
+
+        // Get posts of specific types or posts with plugin-specific meta
+        $posts = get_posts([
+                'numberposts' => -1,
+                'post_type' => $post_types_to_copy,
+                'post_status' => ['publish', 'draft', 'private'],
+                'suppress_filters' => true
+        ]);
+
+        // Also get posts that have plugin-specific meta
+        if (!empty($meta_keys_to_filter)) {
+            global $wpdb;
+            foreach ($meta_keys_to_filter as $meta_pattern) {
+                $meta_posts = $wpdb->get_results($wpdb->prepare(
+                        "SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE meta_key LIKE %s",
+                        $meta_pattern
+                ));
+
+                foreach ($meta_posts as $meta_post) {
+                    $post = get_post($meta_post->post_id);
+                    if ($post && !in_array($post, $posts, true)) {
+                        $posts[] = $post;
+                    }
                 }
             }
         }
 
-        // Copy posts and pages from base site
-        $this->copy_posts($base_id, $new_site_id);
+        $post_data = [];
+        foreach ($posts as $post) {
+            // Get all post meta
+            $all_meta = get_post_meta($post->ID);
+            $filtered_meta = [];
+
+            // Filter meta to only include plugin-specific keys
+            foreach ($all_meta as $meta_key => $meta_values) {
+                $should_include = false;
+
+                foreach ($meta_keys_to_filter as $pattern) {
+                    if (fnmatch($pattern, $meta_key)) {
+                        $should_include = true;
+                        break;
+                    }
+                }
+
+                // Always include essential WordPress meta
+                $essential_meta = ['_edit_lock', '_edit_last', '_wp_page_template'];
+                if (in_array($meta_key, $essential_meta)) {
+                    $should_include = true;
+                }
+
+                if ($should_include) {
+                    $filtered_meta[$meta_key] = $meta_values;
+                }
+            }
+
+            $post_data[] = [
+                    'post_title' => $post->post_title,
+                    'post_content' => $post->post_content,
+                    'post_excerpt' => $post->post_excerpt,
+                    'post_status' => $post->post_status,
+                    'post_type' => $post->post_type,
+                    'post_date' => $post->post_date,
+                    'post_date_gmt' => $post->post_date_gmt,
+                    'post_modified' => $post->post_modified,
+                    'post_modified_gmt' => $post->post_modified_gmt,
+                    'menu_order' => $post->menu_order,
+                    'post_name' => $post->post_name,
+                    'meta' => $filtered_meta
+            ];
+        }
 
         restore_current_blog();
 
-        error_log("Content copying completed from $base_id to $new_site_id");
+        // Insert posts into new site
+        switch_to_blog($new_site_id);
+
+        foreach ($post_data as $post_info) {
+            $meta = $post_info['meta'];
+            unset($post_info['meta']);
+
+            $new_post_id = wp_insert_post($post_info);
+
+            if ($new_post_id && !is_wp_error($new_post_id)) {
+                // Copy filtered post meta
+                foreach ($meta as $key => $values) {
+                    foreach ($values as $value) {
+                        add_post_meta($new_post_id, $key, maybe_unserialize($value));
+                    }
+                }
+            }
+        }
+
+        restore_current_blog();
+    }
+
+    /** Activate specific plugin on the demo site */
+    private function activate_plugin($plugin) {
+        $plugin_files = [
+                'wpvr' => 'wpvr/wpvr.php', // Adjust path as needed
+                'plugin2' => 'plugin2/plugin2.php',
+                'plugin3' => 'plugin3/plugin3.php'
+        ];
+
+        if (isset($plugin_files[$plugin])) {
+            $plugin_file = $plugin_files[$plugin];
+
+            // Check if plugin file exists
+            if (file_exists(WP_PLUGIN_DIR . '/' . $plugin_file)) {
+                $active_plugins = get_option('active_plugins', []);
+
+                if (!in_array($plugin_file, $active_plugins)) {
+                    $active_plugins[] = $plugin_file;
+                    update_option('active_plugins', $active_plugins);
+                    error_log("Activated plugin: $plugin_file");
+                }
+            } else {
+                error_log("Plugin file not found: $plugin_file");
+            }
+        }
     }
 
     /**
@@ -322,57 +505,7 @@ class Rex_Multisite_Demo {
         return false;
     }
 
-    /** Copy posts from base site to new site */
-    private function copy_posts($base_id, $new_site_id) {
-        switch_to_blog($base_id);
 
-        $posts = get_posts([
-                'numberposts' => -1,
-                'post_type' => 'any',
-                'post_status' => 'any'
-        ]);
-
-        $post_data = [];
-        foreach ($posts as $post) {
-            $post_data[] = [
-                    'post_title' => $post->post_title,
-                    'post_content' => $post->post_content,
-                    'post_excerpt' => $post->post_excerpt,
-                    'post_status' => $post->post_status,
-                    'post_type' => $post->post_type,
-                    'post_date' => $post->post_date,
-                    'post_date_gmt' => $post->post_date_gmt,
-                    'post_modified' => $post->post_modified,
-                    'post_modified_gmt' => $post->post_modified_gmt,
-                    'menu_order' => $post->menu_order,
-                    'post_name' => $post->post_name,
-                    'meta' => get_post_meta($post->ID)
-            ];
-        }
-
-        restore_current_blog();
-
-        // Insert posts into new site
-        switch_to_blog($new_site_id);
-
-        foreach ($post_data as $post_info) {
-            $meta = $post_info['meta'];
-            unset($post_info['meta']);
-
-            $new_post_id = wp_insert_post($post_info);
-
-            if ($new_post_id && !is_wp_error($new_post_id)) {
-                // Copy post meta
-                foreach ($meta as $key => $values) {
-                    foreach ($values as $value) {
-                        add_post_meta($new_post_id, $key, maybe_unserialize($value));
-                    }
-                }
-            }
-        }
-
-        restore_current_blog();
-    }
 
     /** Create demo user and return login URL */
     private function create_demo_user($new_site_id, $user_key, $subdomain) {
