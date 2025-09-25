@@ -266,11 +266,9 @@ class Rex_Multisite_Demo {
         // Activate plugin package for the selected demo
         $this->activate_plugin_package($plugin);
 
-        // Apply plugin-specific configurations
-        $this->apply_plugin_configurations($plugin);
 
         // Create sample content for the plugin
-        $this->create_plugin_demo_content($plugin);
+//        $this->create_plugin_demo_content($plugin);
 
         restore_current_blog();
 
@@ -400,159 +398,6 @@ class Rex_Multisite_Demo {
         error_log("Activated plugins for $plugin: " . implode(', ', $activation_successful));
     }
 
-    /** Apply plugin-specific configurations */
-    private function apply_plugin_configurations($plugin) {
-        switch ($plugin) {
-            case 'wpvr':
-                // Set WPVR-specific options
-                update_option('wpvr_settings', [
-                        'license_key' => 'demo_license',
-                        'enable_tour_preview' => true,
-                        'default_scene_type' => '360'
-                ]);
-
-                // Create WPVR-specific pages
-                $this->create_wpvr_demo_pages();
-                break;
-
-            case 'pfm':
-                // Set PFM-specific options
-                update_option('pfm_settings', [
-                        'license_key' => 'demo_license',
-                        'enable_frontend_manager' => true,
-                        'default_post_status' => 'publish'
-                ]);
-
-                // Create PFM demo content
-                $this->create_pfm_demo_pages();
-                break;
-
-            case 'plugin3':
-                // Configure plugin3
-                break;
-        }
-    }
-
-    /** Create plugin-specific demo content */
-    private function create_plugin_demo_content($plugin) {
-        switch ($plugin) {
-            case 'wpvr':
-                $this->create_wpvr_sample_tours();
-                break;
-            case 'pfm':
-                $this->create_pfm_sample_posts();
-                break;
-        }
-    }
-
-    /** Create WPVR demo pages */
-    private function create_wpvr_demo_pages() {
-        $demo_pages = [
-                [
-                        'title' => 'WPVR Tour Gallery',
-                        'content' => '[wpvr_gallery]',
-                        'template' => 'page-wpvr-gallery.php'
-                ],
-                [
-                        'title' => 'Sample VR Tour',
-                        'content' => 'Welcome to our VR experience! This page demonstrates WPVR functionality.',
-                        'template' => 'page-wpvr-tour.php'
-                ]
-        ];
-
-        foreach ($demo_pages as $page_data) {
-            $page_id = wp_insert_post([
-                    'post_title' => $page_data['title'],
-                    'post_content' => $page_data['content'],
-                    'post_status' => 'publish',
-                    'post_type' => 'page',
-                    'post_name' => sanitize_title($page_data['title'])
-            ]);
-
-            if ($page_id && isset($page_data['template'])) {
-                update_post_meta($page_id, '_wp_page_template', $page_data['template']);
-            }
-        }
-    }
-
-    /** Create sample WPVR tours */
-    private function create_wpvr_sample_tours() {
-        // Create sample VR tour post
-        $tour_id = wp_insert_post([
-                'post_title' => 'Demo Virtual Tour',
-                'post_content' => 'This is a sample virtual reality tour to demonstrate WPVR capabilities.',
-                'post_status' => 'publish',
-                'post_type' => 'wpvr_item', // WPVR custom post type
-                'meta_input' => [
-                        'wpvr_tour_type' => '360',
-                        'wpvr_preview_img' => 'demo-preview.jpg',
-                        'wpvr_scene_data' => json_encode([
-                                'scenes' => [
-                                        [
-                                                'id' => 'scene1',
-                                                'title' => 'Demo Scene',
-                                                'image' => 'demo-360.jpg'
-                                        ]
-                                ]
-                        ])
-                ]
-        ]);
-
-        error_log("Created sample WPVR tour with ID: $tour_id");
-    }
-
-    /** Create PFM demo pages */
-    private function create_pfm_demo_pages() {
-        $demo_pages = [
-                [
-                        'title' => 'Frontend Post Manager',
-                        'content' => '[pfm_post_form]',
-                        'slug' => 'frontend-manager'
-                ],
-                [
-                        'title' => 'User Dashboard',
-                        'content' => '[pfm_user_dashboard]',
-                        'slug' => 'user-dashboard'
-                ]
-        ];
-
-        foreach ($demo_pages as $page_data) {
-            wp_insert_post([
-                    'post_title' => $page_data['title'],
-                    'post_content' => $page_data['content'],
-                    'post_status' => 'publish',
-                    'post_type' => 'page',
-                    'post_name' => $page_data['slug']
-            ]);
-        }
-    }
-
-    /** Create sample PFM posts */
-    private function create_pfm_sample_posts() {
-        $sample_posts = [
-                [
-                        'title' => 'Sample Frontend Post',
-                        'content' => 'This post was created using the Post Frontend Manager plugin.',
-                        'author' => get_current_user_id()
-                ],
-                [
-                        'title' => 'Another Demo Post',
-                        'content' => 'This demonstrates the frontend post creation capabilities.',
-                        'author' => get_current_user_id()
-                ]
-        ];
-
-        foreach ($sample_posts as $post_data) {
-            wp_insert_post([
-                    'post_title' => $post_data['title'],
-                    'post_content' => $post_data['content'],
-                    'post_status' => 'publish',
-                    'post_author' => $post_data['author'],
-                    'post_type' => 'post'
-            ]);
-        }
-    }
-
     /**
      * Check if a string is serialized
      */
@@ -588,8 +433,6 @@ class Rex_Multisite_Demo {
         }
         return false;
     }
-
-
 
     /** Create demo user and return login URL */
     private function create_demo_user($new_site_id, $user_key, $subdomain) {
