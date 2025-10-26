@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Rex Multisite Demo
- * Description: Creates per-user demo sites with 30-min expiry and auto-login.
+ * Description: Creates per-user demo sites with 1-hour expiry and auto-login.
  * Version: 1.0.3
  * Author: RexTheme
  */
@@ -214,7 +214,7 @@ class Rex_Multisite_Demo {
                     'url' => $demo_url,
                     'site_id' => $blog_id,
                     'domain' => $domain,
-                    'expires' => date('Y-m-d H:i:s', time() + 1800)
+                    'expires' => date('Y-m-d H:i:s', time() + 3600)
             ]);
 
         } catch (Exception $e) {
@@ -236,7 +236,7 @@ class Rex_Multisite_Demo {
         update_option('home', 'http://' . $domain);
         update_option('blogname', ucfirst($plugin) . ' Demo - ' . $user_key);
         update_option('admin_email', 'demo@' . $domain);
-        update_option('_demo_expiry', time() + 1800); // 30 minutes
+        update_option('_demo_expiry', time() + 3600); // 1 hour
 
         // Initialize critical array options to prevent errors
         $this->initialize_array_option('active_plugins', []);
@@ -485,7 +485,7 @@ class Rex_Multisite_Demo {
         $guest_username = 'demo_admin_' . $user_key;
         $guest_email = $guest_username . '@demo.local';
         $guest_password = wp_generate_password(12, true);
-        $expiry = time() + 1800; // 30 minutes
+        $expiry = time() + 3600; // 1 hour
 
         error_log("Creating demo user: $guest_username for site $new_site_id");
 
@@ -704,7 +704,7 @@ class Rex_Multisite_Demo {
 
             if ($expiry) {
                 // Store in a transient for quick access
-                set_transient('rex_demo_user_' . $user_id, $expiry, 1800);
+                set_transient('rex_demo_user_' . $user_id, $expiry, 3600);
 
                 // Fix plugin-related options that could cause dashboard errors
                 $this->fix_option_formats();
