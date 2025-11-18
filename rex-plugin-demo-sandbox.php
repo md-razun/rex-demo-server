@@ -63,15 +63,54 @@ class Rex_Multisite_Demo {
         // Hook early to check for demo user and ensure timer will be displayed
         add_action('init', [$this, 'check_demo_user'], 5);
 
-        add_action('wp_enqueue_scripts', function() {
-            wp_enqueue_script('rex-demo-js', plugin_dir_url(__FILE__) . 'js/demo-script.js', ['jquery'], '1.0.3', true);
+        add_action('wp_ajax_rex_delete_expired_demo_site', [$this, 'delete_expired_demo_site_ajax']);
+        add_action('wp_ajax_nopriv_rex_delete_expired_demo_site', [$this, 'delete_expired_demo_site_ajax']);
 
-            // Pass AJAX URL and nonce to JS
-            wp_localize_script('rex-demo-js', 'rex_demo_ajax', [
-                    'ajax_url' => admin_url('admin-ajax.php'),
-                    'nonce'    => wp_create_nonce('rex_demo_nonce')
-            ]);
-        });
+        add_action('admin_menu', [$this, 'restrict_contributor_access']);
+        
+        // Enqueue scripts and styles
+        add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
+    }
+
+    public function restrict_contributor_access() {
+        if (current_user_can('contributor')) {
+            remove_menu_page('users.php');
+            remove_menu_page('plugins.php');
+        }
+    }
+
+    public function enqueue_scripts() {
+        wp_enqueue_script('rex-demo-js', plugin_dir_url(__FILE__) . 'js/demo-script.js', ['jquery'], '1.0.3', true);
+
+        // Pass AJAX URL and nonce to JS
+        wp_localize_script('rex-demo-js', 'rex_demo_ajax', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce'    => wp_create_nonce('rex_demo_nonce')
+        ]);
+    }
+
+    public function delete_expired_demo_site_ajax() {
+        if (!isset($_POST['security']) || !wp_verify_nonce($_POST['security'], 'rex_demo_nonce')) {
+            wp_send_json_error('Security check failed');
+            return;
+        }
+
+        $user_id = get_current_user_id();
+        $blog_id = get_current_blog_id();
+
+        if ($user_id && $blog_id) {
+            require_once ABSPATH . 'wp-admin/includes/ms.php';
+            
+            // Delete the user associated with this demo site
+            wp_delete_user($user_id);
+            error_log("Deleted user ID: {$user_id} from expired demo site ID: {$blog_id}");
+
+            // Delete the demo site
+            wp_delete_site($blog_id);
+            error_log("Deleted expired demo site ID: {$blog_id}");
+        }
+
+        wp_send_json_success();
     }
 
     /** Shortcode [watch_demo plugin="wpvr" button_name="Watch Demo"] */
@@ -495,7 +534,7 @@ class Rex_Multisite_Demo {
             error_log("Demo user created successfully with ID: $user_id");
 
             $user = new WP_User($user_id);
-            $user->set_role('administrator');
+            $user->set_role('contributor');
             update_user_meta($user_id, '_demo_expiry', $expiry);
 
             // Ensure user is added to this site with admin role
@@ -684,8 +723,14 @@ class Rex_Multisite_Demo {
                 document.getElementById('rex-demo-countdown').innerText = min + 'm ' + sec;
                 remaining--;
                 if(remaining < 0) {
-                    alert('Demo session expired. You will be redirected to the main site.');
-                    location.href = '<?php echo network_home_url(); ?>';
+                    alert('Demo session expired. Your demo site will now be deleted, and you will be redirected to the main site.');
+                    var data = {
+                        action: 'rex_delete_expired_demo_site',
+                        security: '<?php echo wp_create_nonce("rex_demo_nonce"); ?>'
+                    };
+                    jQuery.post(ajaxurl, data, function(response) {
+                        location.href = '<?php echo network_home_url(); ?>';
+                    });
                 }
             }
             updateCountdown();
