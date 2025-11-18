@@ -67,6 +67,9 @@ class Rex_Multisite_Demo {
         add_action('wp_ajax_nopriv_rex_delete_expired_demo_site', [$this, 'delete_expired_demo_site_ajax']);
 
         add_action('admin_menu', [$this, 'restrict_contributor_access']);
+        
+        // Enqueue scripts and styles
+        add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
     }
 
     public function restrict_contributor_access() {
@@ -75,14 +78,15 @@ class Rex_Multisite_Demo {
             remove_menu_page('plugins.php');
         }
     }
-            wp_enqueue_script('rex-demo-js', plugin_dir_url(__FILE__) . 'js/demo-script.js', ['jquery'], '1.0.3', true);
 
-            // Pass AJAX URL and nonce to JS
-            wp_localize_script('rex-demo-js', 'rex_demo_ajax', [
-                    'ajax_url' => admin_url('admin-ajax.php'),
-                    'nonce'    => wp_create_nonce('rex_demo_nonce')
-            ]);
-        });
+    public function enqueue_scripts() {
+        wp_enqueue_script('rex-demo-js', plugin_dir_url(__FILE__) . 'js/demo-script.js', ['jquery'], '1.0.3', true);
+
+        // Pass AJAX URL and nonce to JS
+        wp_localize_script('rex-demo-js', 'rex_demo_ajax', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce'    => wp_create_nonce('rex_demo_nonce')
+        ]);
     }
 
     public function delete_expired_demo_site_ajax() {
